@@ -116,6 +116,7 @@ type ObjectMeta struct {
 	// Cannot be updated.
 	// More info: http://kubernetes.io/docs/user-guide/identifiers#names
 	// +optional
+
 	Name string `json:"name,omitempty" protobuf:"bytes,1,opt,name=name"`
 
 	// GenerateName is an optional prefix, used by the server, to generate a unique

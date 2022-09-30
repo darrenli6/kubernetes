@@ -24,6 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
+// 定义对象类型
+// 看代码更加直观
 const (
 	// NamespaceDefault means the object is in the default namespace which is applied when not specified by clients
 	NamespaceDefault = "default"

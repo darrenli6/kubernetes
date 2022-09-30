@@ -38,6 +38,7 @@ func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
+// 定义SchemeBuilder
 var (
 	// SchemeBuilder object to register various known types
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
@@ -47,6 +48,7 @@ var (
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
+// 将对象加入SchemeBuild
 func addKnownTypes(scheme *runtime.Scheme) error {
 	if err := scheme.AddIgnoredConversionType(&metav1.TypeMeta{}, &metav1.TypeMeta{}); err != nil {
 		return err
