@@ -64,7 +64,6 @@ const (
 	Node                  GVK = "Node"
 	PersistentVolume      GVK = "PersistentVolume"
 	PersistentVolumeClaim GVK = "PersistentVolumeClaim"
-	Service               GVK = "Service"
 	StorageClass          GVK = "storage.k8s.io/StorageClass"
 	CSINode               GVK = "storage.k8s.io/CSINode"
 	CSIDriver             GVK = "storage.k8s.io/CSIDriver"
@@ -124,7 +123,6 @@ type PodInfo struct {
 	RequiredAntiAffinityTerms  []AffinityTerm
 	PreferredAffinityTerms     []WeightedAffinityTerm
 	PreferredAntiAffinityTerms []WeightedAffinityTerm
-	ParseError                 error
 }
 
 // DeepCopy returns a deep copy of the PodInfo object.
@@ -135,18 +133,17 @@ func (pi *PodInfo) DeepCopy() *PodInfo {
 		RequiredAntiAffinityTerms:  pi.RequiredAntiAffinityTerms,
 		PreferredAffinityTerms:     pi.PreferredAffinityTerms,
 		PreferredAntiAffinityTerms: pi.PreferredAntiAffinityTerms,
-		ParseError:                 pi.ParseError,
 	}
 }
 
 // Update creates a full new PodInfo by default. And only updates the pod when the PodInfo
 // has been instantiated and the passed pod is the exact same one as the original pod.
-func (pi *PodInfo) Update(pod *v1.Pod) {
+func (pi *PodInfo) Update(pod *v1.Pod) error {
 	if pod != nil && pi.Pod != nil && pi.Pod.UID == pod.UID {
 		// PodInfo includes immutable information, and so it is safe to update the pod in place if it is
 		// the exact same pod
 		pi.Pod = pod
-		return
+		return nil
 	}
 	var preferredAffinityTerms []v1.WeightedPodAffinityTerm
 	var preferredAntiAffinityTerms []v1.WeightedPodAffinityTerm
@@ -184,7 +181,7 @@ func (pi *PodInfo) Update(pod *v1.Pod) {
 	pi.RequiredAntiAffinityTerms = requiredAntiAffinityTerms
 	pi.PreferredAffinityTerms = weightedAffinityTerms
 	pi.PreferredAntiAffinityTerms = weightedAntiAffinityTerms
-	pi.ParseError = utilerrors.NewAggregate(parseErrs)
+	return utilerrors.NewAggregate(parseErrs)
 }
 
 // AffinityTerm is a processed version of v1.PodAffinityTerm.
@@ -322,10 +319,10 @@ func getWeightedAffinityTerms(pod *v1.Pod, v1Terms []v1.WeightedPodAffinityTerm)
 }
 
 // NewPodInfo returns a new PodInfo.
-func NewPodInfo(pod *v1.Pod) *PodInfo {
+func NewPodInfo(pod *v1.Pod) (*PodInfo, error) {
 	pInfo := &PodInfo{}
-	pInfo.Update(pod)
-	return pInfo
+	err := pInfo.Update(pod)
+	return pInfo, err
 }
 
 func getPodAffinityTerms(affinity *v1.Affinity) (terms []v1.PodAffinityTerm) {
@@ -598,18 +595,6 @@ func (n *NodeInfo) String() string {
 // AddPodInfo adds pod information to this NodeInfo.
 // Consider using this instead of AddPod if a PodInfo is already computed.
 func (n *NodeInfo) AddPodInfo(podInfo *PodInfo) {
-	res, non0CPU, non0Mem := calculateResource(podInfo.Pod)
-	n.Requested.MilliCPU += res.MilliCPU
-	n.Requested.Memory += res.Memory
-	n.Requested.EphemeralStorage += res.EphemeralStorage
-	if n.Requested.ScalarResources == nil && len(res.ScalarResources) > 0 {
-		n.Requested.ScalarResources = map[v1.ResourceName]int64{}
-	}
-	for rName, rQuant := range res.ScalarResources {
-		n.Requested.ScalarResources[rName] += rQuant
-	}
-	n.NonZeroRequested.MilliCPU += non0CPU
-	n.NonZeroRequested.Memory += non0Mem
 	n.Pods = append(n.Pods, podInfo)
 	if podWithAffinity(podInfo.Pod) {
 		n.PodsWithAffinity = append(n.PodsWithAffinity, podInfo)
@@ -617,17 +602,15 @@ func (n *NodeInfo) AddPodInfo(podInfo *PodInfo) {
 	if podWithRequiredAntiAffinity(podInfo.Pod) {
 		n.PodsWithRequiredAntiAffinity = append(n.PodsWithRequiredAntiAffinity, podInfo)
 	}
-
-	// Consume ports when pods added.
-	n.updateUsedPorts(podInfo.Pod, true)
-	n.updatePVCRefCounts(podInfo.Pod, true)
-
-	n.Generation = nextGeneration()
+	n.update(podInfo.Pod, 1)
 }
 
 // AddPod is a wrapper around AddPodInfo.
 func (n *NodeInfo) AddPod(pod *v1.Pod) {
-	n.AddPodInfo(NewPodInfo(pod))
+	// ignore this err since apiserver doesn't properly validate affinity terms
+	// and we can't fix the validation for backwards compatibility.
+	podInfo, _ := NewPodInfo(pod)
+	n.AddPodInfo(podInfo)
 }
 
 func podWithAffinity(p *v1.Pod) bool {
@@ -681,31 +664,36 @@ func (n *NodeInfo) RemovePod(pod *v1.Pod) error {
 			// delete the element
 			n.Pods[i] = n.Pods[len(n.Pods)-1]
 			n.Pods = n.Pods[:len(n.Pods)-1]
-			// reduce the resource data
-			res, non0CPU, non0Mem := calculateResource(pod)
 
-			n.Requested.MilliCPU -= res.MilliCPU
-			n.Requested.Memory -= res.Memory
-			n.Requested.EphemeralStorage -= res.EphemeralStorage
-			if len(res.ScalarResources) > 0 && n.Requested.ScalarResources == nil {
-				n.Requested.ScalarResources = map[v1.ResourceName]int64{}
-			}
-			for rName, rQuant := range res.ScalarResources {
-				n.Requested.ScalarResources[rName] -= rQuant
-			}
-			n.NonZeroRequested.MilliCPU -= non0CPU
-			n.NonZeroRequested.Memory -= non0Mem
-
-			// Release ports when remove Pods.
-			n.updateUsedPorts(pod, false)
-			n.updatePVCRefCounts(pod, false)
-
-			n.Generation = nextGeneration()
+			n.update(pod, -1)
 			n.resetSlicesIfEmpty()
 			return nil
 		}
 	}
 	return fmt.Errorf("no corresponding pod %s in pods of node %s", pod.Name, n.node.Name)
+}
+
+// update node info based on the pod and sign.
+// The sign will be set to `+1` when AddPod and to `-1` when RemovePod.
+func (n *NodeInfo) update(pod *v1.Pod, sign int64) {
+	res, non0CPU, non0Mem := calculateResource(pod)
+	n.Requested.MilliCPU += sign * res.MilliCPU
+	n.Requested.Memory += sign * res.Memory
+	n.Requested.EphemeralStorage += sign * res.EphemeralStorage
+	if n.Requested.ScalarResources == nil && len(res.ScalarResources) > 0 {
+		n.Requested.ScalarResources = map[v1.ResourceName]int64{}
+	}
+	for rName, rQuant := range res.ScalarResources {
+		n.Requested.ScalarResources[rName] += sign * rQuant
+	}
+	n.NonZeroRequested.MilliCPU += sign * non0CPU
+	n.NonZeroRequested.Memory += sign * non0Mem
+
+	// Consume ports when pod added or release ports when pod removed.
+	n.updateUsedPorts(pod, sign > 0)
+	n.updatePVCRefCounts(pod, sign > 0)
+
+	n.Generation = nextGeneration()
 }
 
 // resets the slices to nil so that we can do DeepEqual in unit tests.

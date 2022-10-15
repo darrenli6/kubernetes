@@ -405,8 +405,8 @@ func (s *SimpleStream) Close() error {
 	return nil
 }
 
-func (obj *SimpleStream) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKind }
-func (obj *SimpleStream) DeepCopyObject() runtime.Object {
+func (s *SimpleStream) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKind }
+func (s *SimpleStream) DeepCopyObject() runtime.Object {
 	panic("SimpleStream does not support DeepCopy")
 }
 
@@ -3223,7 +3223,7 @@ func TestCreateNotFound(t *testing.T) {
 	handler := handle(map[string]rest.Storage{
 		"simple": &SimpleRESTStorage{
 			// storage.Create can fail with not found error in theory.
-			// See http://pr.k8s.io/486#discussion_r15037092.
+			// See https://pr.k8s.io/486#discussion_r15037092.
 			errors: map[string]error{"create": apierrors.NewNotFound(schema.GroupResource{Resource: "simples"}, "id")},
 		},
 	})

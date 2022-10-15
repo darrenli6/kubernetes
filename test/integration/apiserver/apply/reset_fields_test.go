@@ -30,7 +30,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	genericfeatures "k8s.io/apiserver/pkg/features"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -38,7 +37,6 @@ import (
 	apiservertesting "k8s.io/kubernetes/cmd/kube-apiserver/app/testing"
 	k8sfeatures "k8s.io/kubernetes/pkg/features"
 
-	//k8sfeatures "k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/test/integration/etcd"
 	"k8s.io/kubernetes/test/integration/framework"
 	"k8s.io/kubernetes/test/utils/image"
@@ -72,11 +70,7 @@ var resetFieldsStatusData = map[schema.GroupVersionResource]string{
 // resetFieldsStatusDefault conflicts with statusDefault
 const resetFieldsStatusDefault = `{"status": {"conditions": [{"type": "MyStatus", "status":"False"}]}}`
 
-var resetFieldsSkippedResources = map[string]struct{}{
-	// TODO: flowschemas is flaking,
-	// possible bug in the flowschemas controller.
-	"flowschemas": {},
-}
+var resetFieldsSkippedResources = map[string]struct{}{}
 
 // noConflicts is the set of reources for which
 // a conflict cannot occur.
@@ -126,9 +120,11 @@ var resetFieldsSpecData = map[schema.GroupVersionResource]string{
 	gvr("flowcontrol.apiserver.k8s.io", "v1alpha1", "flowschemas"):                 `{"metadata": {"labels":{"a":"c"}}, "spec": {"priorityLevelConfiguration": {"name": "name2"}}}`,
 	gvr("flowcontrol.apiserver.k8s.io", "v1beta1", "flowschemas"):                  `{"metadata": {"labels":{"a":"c"}}, "spec": {"priorityLevelConfiguration": {"name": "name2"}}}`,
 	gvr("flowcontrol.apiserver.k8s.io", "v1beta2", "flowschemas"):                  `{"metadata": {"labels":{"a":"c"}}, "spec": {"priorityLevelConfiguration": {"name": "name2"}}}`,
+	gvr("flowcontrol.apiserver.k8s.io", "v1beta3", "flowschemas"):                  `{"metadata": {"labels":{"a":"c"}}, "spec": {"priorityLevelConfiguration": {"name": "name2"}}}`,
 	gvr("flowcontrol.apiserver.k8s.io", "v1alpha1", "prioritylevelconfigurations"): `{"metadata": {"labels":{"a":"c"}}, "spec": {"limited": {"assuredConcurrencyShares": 23}}}`,
 	gvr("flowcontrol.apiserver.k8s.io", "v1beta1", "prioritylevelconfigurations"):  `{"metadata": {"labels":{"a":"c"}}, "spec": {"limited": {"assuredConcurrencyShares": 23}}}`,
 	gvr("flowcontrol.apiserver.k8s.io", "v1beta2", "prioritylevelconfigurations"):  `{"metadata": {"labels":{"a":"c"}}, "spec": {"limited": {"assuredConcurrencyShares": 23}}}`,
+	gvr("flowcontrol.apiserver.k8s.io", "v1beta3", "prioritylevelconfigurations"):  `{"metadata": {"labels":{"a":"c"}}, "spec": {"limited": {"nominalConcurrencyShares": 23}}}`,
 	gvr("extensions", "v1beta1", "ingresses"):                                      `{"spec": {"backend": {"serviceName": "service2"}}}`,
 	gvr("networking.k8s.io", "v1beta1", "ingresses"):                               `{"spec": {"backend": {"serviceName": "service2"}}}`,
 	gvr("networking.k8s.io", "v1", "ingresses"):                                    `{"spec": {"defaultBackend": {"service": {"name": "service2"}}}}`,
@@ -153,7 +149,6 @@ var resetFieldsSpecData = map[schema.GroupVersionResource]string{
 // confirms that the fieldmanager1 is wiped of the status and fieldmanager2 is wiped of the spec.
 // We then attempt to apply obj2 to the spec endpoint which fails with an expected conflict.
 func TestApplyResetFields(t *testing.T) {
-	defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, genericfeatures.ServerSideApply, true)()
 	defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, k8sfeatures.NetworkPolicyStatus, true)()
 
 	server, err := apiservertesting.StartTestServer(t, apiservertesting.NewDefaultTestServerOptions(), []string{"--disable-admission-plugins", "ServiceAccount,TaintNodesByCondition"}, framework.SharedEtcd())

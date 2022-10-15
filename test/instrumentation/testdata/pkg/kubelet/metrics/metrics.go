@@ -63,8 +63,22 @@ const (
 	RunPodSandboxErrorsKey   = "run_podsandbox_errors_total"
 )
 
+const (
+	requestKind         = "request_kind"
+	priorityLevel       = "priority_level"
+	flowSchema          = "flow_schema"
+	phase               = "phase"
+	LabelNamePhase      = "phase"
+	LabelValueWaiting   = "waiting"
+	LabelValueExecuting = "executing"
+)
+
 var (
 	defObjectives = map[float64]float64{0.5: 0.5, 0.75: 0.75}
+	testBuckets   = []float64{0, 0.5, 1.0}
+	testLabels    = []string{"a", "b", "c"}
+	maxAge        = 2 * time.Minute
+
 	// NodeName is a Gauge that tracks the ode's name. The count is always 1.
 	NodeName = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
@@ -81,7 +95,7 @@ var (
 			Subsystem:      KubeletSubsystem,
 			Name:           "containers_per_pod_count",
 			Help:           "The number of containers per pod.",
-			Buckets:        metrics.ExponentialBuckets(1, 2, 5),
+			Buckets:        testBuckets,
 			StabilityLevel: metrics.ALPHA,
 		},
 	)
@@ -95,7 +109,30 @@ var (
 			Buckets:        metrics.DefBuckets,
 			StabilityLevel: metrics.ALPHA,
 		},
-		[]string{"operation_type"},
+		testLabels,
+	)
+	// PodWorkerDuration is a Histogram that tracks the duration (in seconds) in takes to sync a single pod.
+	// Broken down by the operation type.
+	SummaryMaxAge = metrics.NewSummary(
+		&metrics.SummaryOpts{
+			Subsystem:      KubeletSubsystem,
+			Name:           "max_age",
+			Help:           "Duration in seconds to sync a single pod. Broken down by operation type: create, update, or sync",
+			StabilityLevel: metrics.BETA,
+			MaxAge:         2 * time.Hour,
+		},
+	)
+
+	// PodWorkerDuration is a Histogram that tracks the duration (in seconds) in takes to sync a single pod.
+	// Broken down by the operation type.
+	SummaryMaxAgeConst = metrics.NewSummary(
+		&metrics.SummaryOpts{
+			Subsystem:      KubeletSubsystem,
+			Name:           "max_age_const",
+			Help:           "Duration in seconds to sync a single pod. Broken down by operation type: create, update, or sync",
+			StabilityLevel: metrics.BETA,
+			MaxAge:         maxAge,
+		},
 	)
 	// PodStartDuration is a Histogram that tracks the duration (in seconds) it takes for a single pod to go from pending to running.
 	PodStartDuration = metrics.NewHistogram(
@@ -128,6 +165,35 @@ var (
 			Buckets:        metrics.DefBuckets,
 			StabilityLevel: metrics.ALPHA,
 		},
+	)
+	// PriorityLevelExecutionSeatsGaugeVec creates observers of seats occupied throughout execution for priority levels
+	PriorityLevelExecutionSeatsGaugeVec = metrics.NewTimingHistogramVec(
+		&metrics.TimingHistogramOpts{
+			Namespace: "namespace",
+			Subsystem: "subsystem",
+			Name:      "priority_level_seat_utilization",
+			Help:      "Observations, at the end of every nanosecond, of utilization of seats for any stage of execution (but only initial stage for WATCHes)",
+			// Buckets for both 0.99 and 1.0 mean PromQL's histogram_quantile will reveal saturation
+			Buckets:        []float64{0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1},
+			ConstLabels:    map[string]string{phase: "executing"},
+			StabilityLevel: metrics.BETA,
+		},
+		[]string{"priorityLevel"},
+	)
+
+	// PriorityLevelExecutionSeatsGaugeVec creates observers of seats occupied throughout execution for priority levels
+	TestConstLabels = metrics.NewTimingHistogramVec(
+		&metrics.TimingHistogramOpts{
+			Namespace: "test",
+			Subsystem: "const",
+			Name:      "label",
+			Help:      "Observations, at the end of every nanosecond, of utilization of seats for any stage of execution (but only initial stage for WATCHes)",
+			// Buckets for both 0.99 and 1.0 mean PromQL's histogram_quantile will reveal saturation
+			Buckets:        []float64{0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1},
+			ConstLabels:    map[string]string{"somestring": "executing", phase: "blah"},
+			StabilityLevel: metrics.BETA,
+		},
+		[]string{"priorityLevel"},
 	)
 	// PLEGRelistDuration is a Histogram that tracks the duration (in seconds) it takes for relisting pods in the Kubelet's
 	// Pod Lifecycle Event Generator (PLEG).
@@ -190,7 +256,7 @@ var (
 			Name:           RuntimeOperationsDurationKey,
 			Help:           "Duration in seconds of runtime operations. Broken down by operation type.",
 			Buckets:        metrics.ExponentialBuckets(.005, 2.5, 14),
-			StabilityLevel: metrics.ALPHA,
+			StabilityLevel: metrics.BETA,
 		},
 		[]string{"operation_type"},
 	)
@@ -240,6 +306,18 @@ var (
 		},
 		[]string{"preemption_signal"},
 	)
+	// MultiLineHelp tests that we can parse multi-line strings
+	MultiLineHelp = metrics.NewCounterVec(
+		&metrics.CounterOpts{
+			Subsystem: KubeletSubsystem,
+			Name:      "multiline",
+			Help: "Cumulative number of pod preemptions by preemption resource " +
+				"asdf asdf asdf " +
+				"asdfas dfasdf",
+			StabilityLevel: metrics.STABLE,
+		},
+		[]string{"preemption_signal"},
+	)
 	// DevicePluginRegistrationCount is a Counter that tracks the cumulative number of device plugin registrations.
 	// Broken down by resource name.
 	DevicePluginRegistrationCount = metrics.NewCounterVec(
@@ -259,7 +337,7 @@ var (
 			Name:           DevicePluginAllocationDurationKey,
 			Help:           "Duration in seconds to serve a device plugin Allocation request. Broken down by resource name.",
 			Buckets:        metrics.DefBuckets,
-			StabilityLevel: metrics.ALPHA,
+			StabilityLevel: metrics.BETA,
 		},
 		[]string{"resource_name"},
 	)
@@ -428,6 +506,26 @@ func Register(collectors ...metrics.StableCollector) {
 		for _, collector := range collectors {
 			legacyregistry.CustomMustRegister(collector)
 		}
+		legacyregistry.RawMustRegister(metrics.NewGaugeFunc(
+			&metrics.GaugeOpts{
+				Subsystem: "kubelet",
+				Name:      "certificate_manager_client_ttl_seconds",
+				Help: "Gauge of the TTL (time-to-live) of the Kubelet's client certificate. " +
+					"The value is in seconds until certificate expiry (negative if already expired). " +
+					"If client certificate is invalid or unused, the value will be +INF.",
+				StabilityLevel: metrics.BETA,
+			},
+			func() float64 {
+				return 0
+			},
+		))
+		_ = metrics.Labels{
+			"probe_type": "1",
+			"container":  "2",
+			"pod":        "podName",
+			"namespace":  "space",
+			"pod_uid":    "123",
+		}
 	})
 }
 
@@ -444,4 +542,8 @@ func SinceInSeconds(start time.Time) float64 {
 // SetNodeName sets the NodeName Gauge to 1.
 func SetNodeName(name types.NodeName) {
 	NodeName.WithLabelValues(string(name)).Set(1)
+}
+
+func Blah() metrics.ObserverMetric {
+	return EvictionStatsAge.With(metrics.Labels{"plugins": "ASDf"})
 }

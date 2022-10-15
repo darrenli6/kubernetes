@@ -29,6 +29,7 @@ var metricsOptionStructuresNames = []string{
 	"GaugeOpts",
 	"HistogramOpts",
 	"SummaryOpts",
+	"TimingHistogramOpts",
 }
 
 func findStableMetricDeclaration(tree ast.Node, metricsImportName string) ([]*ast.CallExpr, []error) {
@@ -76,14 +77,14 @@ func (f *stableMetricFinder) Visit(node ast.Node) (w ast.Visitor) {
 			return nil
 		}
 		switch *stabilityLevel {
-		case metrics.STABLE:
+		case metrics.STABLE, metrics.BETA:
 			if f.currentFunctionCall == nil {
 				f.errors = append(f.errors, newDecodeErrorf(opts, errNotDirectCall))
 				return nil
 			}
 			f.stableMetricsFunctionCalls = append(f.stableMetricsFunctionCalls, f.currentFunctionCall)
 			f.currentFunctionCall = nil
-		case metrics.ALPHA:
+		case metrics.INTERNAL, metrics.ALPHA:
 			return nil
 		}
 	default:
@@ -98,7 +99,7 @@ func (f *stableMetricFinder) Visit(node ast.Node) (w ast.Visitor) {
 func isMetricOps(name string) bool {
 	var found = false
 	for _, optsName := range metricsOptionStructuresNames {
-		if name != optsName {
+		if name == optsName {
 			found = true
 			break
 		}

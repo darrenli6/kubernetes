@@ -37,7 +37,6 @@ import (
 	genericfeatures "k8s.io/apiserver/pkg/features"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/apiserver/pkg/server/healthz"
-	genericoptions "k8s.io/apiserver/pkg/server/options"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	kubeexternalinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
@@ -91,11 +90,16 @@ func createAggregatorConfig(
 	}
 
 	// copy the etcd options so we don't mutate originals.
+	// we assume that the etcd options have been completed already.  avoid messing with anything outside
+	// of changes to StorageConfig as that may lead to unexpected behavior when the options are applied.
 	etcdOptions := *commandOptions.Etcd
 	etcdOptions.StorageConfig.Paging = utilfeature.DefaultFeatureGate.Enabled(genericfeatures.APIListChunking)
 	etcdOptions.StorageConfig.Codec = aggregatorscheme.Codecs.LegacyCodec(v1.SchemeGroupVersion, v1beta1.SchemeGroupVersion)
 	etcdOptions.StorageConfig.EncodeVersioner = runtime.NewMultiGroupVersioner(v1.SchemeGroupVersion, schema.GroupKind{Group: v1beta1.GroupName})
-	genericConfig.RESTOptionsGetter = &genericoptions.SimpleRestOptionsFactory{Options: etcdOptions}
+	etcdOptions.SkipHealthEndpoints = true // avoid double wiring of health checks
+	if err := etcdOptions.ApplyTo(&genericConfig); err != nil {
+		return nil, err
+	}
 
 	// override MergedResourceConfig with aggregator defaults and registry
 	if err := commandOptions.APIEnablement.ApplyTo(
@@ -278,6 +282,7 @@ var apiVersionPriorities = map[schema.GroupVersion]priority{
 	{Group: "node.k8s.io", Version: "v1beta1"}:                   {group: 16300, version: 9},
 	{Group: "discovery.k8s.io", Version: "v1"}:                   {group: 16200, version: 15},
 	{Group: "discovery.k8s.io", Version: "v1beta1"}:              {group: 16200, version: 12},
+	{Group: "flowcontrol.apiserver.k8s.io", Version: "v1beta3"}:  {group: 16100, version: 18},
 	{Group: "flowcontrol.apiserver.k8s.io", Version: "v1beta2"}:  {group: 16100, version: 15},
 	{Group: "flowcontrol.apiserver.k8s.io", Version: "v1beta1"}:  {group: 16100, version: 12},
 	{Group: "flowcontrol.apiserver.k8s.io", Version: "v1alpha1"}: {group: 16100, version: 9},
