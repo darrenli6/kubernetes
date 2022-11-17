@@ -408,6 +408,23 @@ func NewAgnhostPod(ns, podName string, volumes []v1.Volume, mounts []v1.VolumeMo
 	return pod
 }
 
+func NewAgnhostPodFromContainers(ns, podName string, volumes []v1.Volume, containers ...v1.Container) *v1.Pod {
+	immediate := int64(0)
+	pod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      podName,
+			Namespace: ns,
+		},
+		Spec: v1.PodSpec{
+			Containers:                    containers[:],
+			Volumes:                       volumes,
+			SecurityContext:               &v1.PodSecurityContext{},
+			TerminationGracePeriodSeconds: &immediate,
+		},
+	}
+	return pod
+}
+
 // NewAgnhostContainer returns the container Spec of an agnhost container.
 func NewAgnhostContainer(containerName string, mounts []v1.VolumeMount, ports []v1.ContainerPort, args ...string) v1.Container {
 	if len(args) == 0 {
@@ -604,6 +621,15 @@ func GetPodSecretUpdateTimeout(c clientset.Interface) time.Duration {
 	}
 	podLogTimeout := 240*time.Second + secretTTL
 	return podLogTimeout
+}
+
+// VerifyPodHasConditionWithType verifies the pod has the expected condition by type
+func VerifyPodHasConditionWithType(f *framework.Framework, pod *v1.Pod, cType v1.PodConditionType) {
+	pod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(context.TODO(), pod.Name, metav1.GetOptions{})
+	framework.ExpectNoError(err, "Failed to get the recent pod object for name: %q", pod.Name)
+	if condition := FindPodConditionByType(&pod.Status, cType); condition == nil {
+		framework.Failf("pod %q should have the condition: %q, pod status: %v", pod.Name, cType, pod.Status)
+	}
 }
 
 func getNodeTTLAnnotationValue(c clientset.Interface) (time.Duration, error) {

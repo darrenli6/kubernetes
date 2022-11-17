@@ -52,6 +52,7 @@ import (
 	_ "k8s.io/kubernetes/test/e2e/autoscaling"
 	_ "k8s.io/kubernetes/test/e2e/cloud"
 	_ "k8s.io/kubernetes/test/e2e/common"
+	_ "k8s.io/kubernetes/test/e2e/dra"
 	_ "k8s.io/kubernetes/test/e2e/instrumentation"
 	_ "k8s.io/kubernetes/test/e2e/kubectl"
 	_ "k8s.io/kubernetes/test/e2e/lifecycle"
@@ -67,6 +68,7 @@ import (
 	_ "k8s.io/kubernetes/test/e2e/framework/debug/init"
 	_ "k8s.io/kubernetes/test/e2e/framework/metrics/init"
 	_ "k8s.io/kubernetes/test/e2e/framework/node/init"
+	_ "k8s.io/kubernetes/test/utils/format"
 )
 
 // handleFlags sets up all flags and parses the command line.

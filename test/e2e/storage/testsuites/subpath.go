@@ -99,8 +99,7 @@ func (s *subPathTestSuite) SkipUnsupportedTests(driver storageframework.TestDriv
 
 func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) {
 	type local struct {
-		config        *storageframework.PerTestConfig
-		driverCleanup func()
+		config *storageframework.PerTestConfig
 
 		hostExec          storageutils.HostExec
 		resource          *storageframework.VolumeResource
@@ -124,7 +123,7 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 		l = local{}
 
 		// Now do the more expensive test initialization.
-		l.config, l.driverCleanup = driver.PrepareTest(f)
+		l.config = driver.PrepareTest(f)
 		l.migrationCheck = newMigrationOpCheck(f.ClientSet, f.ClientConfig(), driver.GetDriverInfo().InTreePluginName)
 		testVolumeSizeRange := s.GetTestSuiteInfo().SupportedSizeRange
 		l.resource = storageframework.CreateVolumeResource(driver, l.config, pattern, testVolumeSizeRange)
@@ -181,8 +180,6 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 			l.resource = nil
 		}
 
-		errs = append(errs, storageutils.TryFunc(l.driverCleanup))
-		l.driverCleanup = nil
 		framework.ExpectNoError(errors.NewAggregate(errs), "while cleaning up resource")
 
 		if l.hostExec != nil {
@@ -1005,7 +1002,7 @@ func testSubpathReconstruction(f *framework.Framework, hostExec storageutils.Hos
 	}
 	framework.ExpectNotEqual(podNode, nil, "pod node should exist in schedulable nodes")
 
-	storageutils.TestVolumeUnmountsFromDeletedPodWithForceOption(f.ClientSet, f, pod, forceDelete, true)
+	storageutils.TestVolumeUnmountsFromDeletedPodWithForceOption(f.ClientSet, f, pod, forceDelete, true, nil, volumePath)
 
 	if podNode != nil {
 		mountPoints := globalMountPointsByNode[podNode.Name]

@@ -703,7 +703,7 @@ func TestValidatePersistentVolumeSourceUpdate(t *testing.T) {
 		Namespace: "default",
 	}
 
-	//longSecretRef refers to the secretRefs which are validated with IsDNS1123Subdomain
+	// longSecretRef refers to the secretRefs which are validated with IsDNS1123Subdomain
 	longSecretName := "key-name.example.com"
 	longSecretRef := &core.SecretReference{
 		Name:      longSecretName,
@@ -1672,7 +1672,7 @@ func testValidatePVC(t *testing.T, ephemeral bool) {
 					Kind: "PersistentVolumeClaim",
 					Name: "pvc1",
 				},
-				DataSourceRef: &core.TypedLocalObjectReference{
+				DataSourceRef: &core.TypedObjectReference{
 					Kind: "PersistentVolumeClaim",
 					Name: "pvc2",
 				},
@@ -2440,40 +2440,45 @@ func TestValidationOptionsForPersistentVolumeClaim(t *testing.T) {
 			oldPvc:                 nil,
 			enableReadWriteOncePod: true,
 			expectValidationOpts: PersistentVolumeClaimSpecValidationOptions{
-				AllowReadWriteOncePod:             true,
-				EnableRecoverFromExpansionFailure: false,
+				AllowReadWriteOncePod:                true,
+				EnableRecoverFromExpansionFailure:    false,
+				EnableRetroactiveDefaultStorageClass: true,
 			},
 		},
 		"rwop allowed because feature enabled": {
 			oldPvc:                 pvcWithAccessModes([]core.PersistentVolumeAccessMode{core.ReadWriteOnce}),
 			enableReadWriteOncePod: true,
 			expectValidationOpts: PersistentVolumeClaimSpecValidationOptions{
-				AllowReadWriteOncePod:             true,
-				EnableRecoverFromExpansionFailure: false,
+				AllowReadWriteOncePod:                true,
+				EnableRecoverFromExpansionFailure:    false,
+				EnableRetroactiveDefaultStorageClass: true,
 			},
 		},
 		"rwop not allowed because not used and feature disabled": {
 			oldPvc:                 pvcWithAccessModes([]core.PersistentVolumeAccessMode{core.ReadWriteOnce}),
 			enableReadWriteOncePod: false,
 			expectValidationOpts: PersistentVolumeClaimSpecValidationOptions{
-				AllowReadWriteOncePod:             false,
-				EnableRecoverFromExpansionFailure: false,
+				AllowReadWriteOncePod:                false,
+				EnableRecoverFromExpansionFailure:    false,
+				EnableRetroactiveDefaultStorageClass: true,
 			},
 		},
 		"rwop allowed because used and feature enabled": {
 			oldPvc:                 pvcWithAccessModes([]core.PersistentVolumeAccessMode{core.ReadWriteOncePod}),
 			enableReadWriteOncePod: true,
 			expectValidationOpts: PersistentVolumeClaimSpecValidationOptions{
-				AllowReadWriteOncePod:             true,
-				EnableRecoverFromExpansionFailure: false,
+				AllowReadWriteOncePod:                true,
+				EnableRecoverFromExpansionFailure:    false,
+				EnableRetroactiveDefaultStorageClass: true,
 			},
 		},
 		"rwop allowed because used and feature disabled": {
 			oldPvc:                 pvcWithAccessModes([]core.PersistentVolumeAccessMode{core.ReadWriteOncePod}),
 			enableReadWriteOncePod: false,
 			expectValidationOpts: PersistentVolumeClaimSpecValidationOptions{
-				AllowReadWriteOncePod:             true,
-				EnableRecoverFromExpansionFailure: false,
+				AllowReadWriteOncePod:                true,
+				EnableRecoverFromExpansionFailure:    false,
+				EnableRetroactiveDefaultStorageClass: true,
 			},
 		},
 	}
@@ -4092,6 +4097,20 @@ func TestValidateVolumes(t *testing.T) {
 				field: "rbd.image",
 			}},
 		},
+		// Cinder
+		{
+			name: "valid Cinder",
+			vol: core.Volume{
+				Name: "cinder",
+				VolumeSource: core.VolumeSource{
+					Cinder: &core.CinderVolumeSource{
+						VolumeID: "29ea5088-4f60-4757-962e-dba678767887",
+						FSType:   "ext4",
+						ReadOnly: false,
+					},
+				},
+			},
+		},
 		// CephFS
 		{
 			name: "valid CephFS",
@@ -5366,7 +5385,7 @@ func TestAlphaLocalStorageCapacityIsolation(t *testing.T) {
 				resource.BinarySI),
 		},
 	}
-	if errs := ValidateResourceRequirements(&containerLimitCase, field.NewPath("resources"), PodValidationOptions{}); len(errs) != 0 {
+	if errs := ValidateResourceRequirements(&containerLimitCase, nil, field.NewPath("resources"), PodValidationOptions{}); len(errs) != 0 {
 		t.Errorf("expected success: %v", errs)
 	}
 }
@@ -6836,7 +6855,7 @@ func TestValidateEphemeralContainers(t *testing.T) {
 			},
 		},
 	} {
-		if errs := validateEphemeralContainers(ephemeralContainers, containers, initContainers, vols, field.NewPath("ephemeralContainers"), PodValidationOptions{}); len(errs) != 0 {
+		if errs := validateEphemeralContainers(ephemeralContainers, containers, initContainers, vols, nil, field.NewPath("ephemeralContainers"), PodValidationOptions{}); len(errs) != 0 {
 			t.Errorf("expected success for '%s' but got errors: %v", title, errs)
 		}
 	}
@@ -7118,7 +7137,7 @@ func TestValidateEphemeralContainers(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.title+"__@L"+tc.line, func(t *testing.T) {
-			errs := validateEphemeralContainers(tc.ephemeralContainers, containers, initContainers, vols, field.NewPath("ephemeralContainers"), PodValidationOptions{})
+			errs := validateEphemeralContainers(tc.ephemeralContainers, containers, initContainers, vols, nil, field.NewPath("ephemeralContainers"), PodValidationOptions{})
 			if len(errs) == 0 {
 				t.Fatal("expected error but received none")
 			}
@@ -7397,7 +7416,7 @@ func TestValidateContainers(t *testing.T) {
 			TerminationMessagePolicy: "File",
 		},
 	}
-	if errs := validateContainers(successCase, volumeDevices, field.NewPath("field"), PodValidationOptions{}); len(errs) != 0 {
+	if errs := validateContainers(successCase, volumeDevices, nil, field.NewPath("field"), PodValidationOptions{}); len(errs) != 0 {
 		t.Errorf("expected success: %v", errs)
 	}
 
@@ -8021,7 +8040,7 @@ func TestValidateContainers(t *testing.T) {
 	}
 	for _, tc := range errorCases {
 		t.Run(tc.title+"__@L"+tc.line, func(t *testing.T) {
-			errs := validateContainers(tc.containers, volumeDevices, field.NewPath("containers"), PodValidationOptions{})
+			errs := validateContainers(tc.containers, volumeDevices, nil, field.NewPath("containers"), PodValidationOptions{})
 			if len(errs) == 0 {
 				t.Fatal("expected error but received none")
 			}
@@ -8071,7 +8090,7 @@ func TestValidateInitContainers(t *testing.T) {
 			TerminationMessagePolicy: "File",
 		},
 	}
-	if errs := validateInitContainers(successCase, containers, volumeDevices, field.NewPath("field"), PodValidationOptions{}); len(errs) != 0 {
+	if errs := validateInitContainers(successCase, containers, volumeDevices, nil, field.NewPath("field"), PodValidationOptions{}); len(errs) != 0 {
 		t.Errorf("expected success: %v", errs)
 	}
 
@@ -8263,7 +8282,7 @@ func TestValidateInitContainers(t *testing.T) {
 	}
 	for _, tc := range errorCases {
 		t.Run(tc.title+"__@L"+tc.line, func(t *testing.T) {
-			errs := validateInitContainers(tc.initContainers, containers, volumeDevices, field.NewPath("initContainers"), PodValidationOptions{})
+			errs := validateInitContainers(tc.initContainers, containers, volumeDevices, nil, field.NewPath("initContainers"), PodValidationOptions{})
 			if len(errs) == 0 {
 				t.Fatal("expected error but received none")
 			}
@@ -10789,6 +10808,91 @@ func TestValidatePod(t *testing.T) {
 	}
 }
 
+func TestValidatePodCreateWithSchedulingGates(t *testing.T) {
+	applyEssentials := func(pod *core.Pod) {
+		pod.Spec.Containers = []core.Container{
+			{Name: "con", Image: "pause", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File"},
+		}
+		pod.Spec.RestartPolicy = core.RestartPolicyAlways
+		pod.Spec.DNSPolicy = core.DNSClusterFirst
+	}
+	fldPath := field.NewPath("spec")
+
+	tests := []struct {
+		name            string
+		pod             *core.Pod
+		featureEnabled  bool
+		wantFieldErrors field.ErrorList
+	}{
+		{
+			name: "create a Pod with nodeName and schedulingGates, feature disabled",
+			pod: &core.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "pod", Namespace: "ns"},
+				Spec: core.PodSpec{
+					NodeName: "node",
+					SchedulingGates: []core.PodSchedulingGate{
+						{Name: "foo"},
+					},
+				},
+			},
+			featureEnabled:  false,
+			wantFieldErrors: nil,
+		},
+		{
+			name: "create a Pod with nodeName and schedulingGates, feature enabled",
+			pod: &core.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "pod", Namespace: "ns"},
+				Spec: core.PodSpec{
+					NodeName: "node",
+					SchedulingGates: []core.PodSchedulingGate{
+						{Name: "foo"},
+					},
+				},
+			},
+			featureEnabled:  true,
+			wantFieldErrors: []*field.Error{field.Forbidden(fldPath.Child("nodeName"), "cannot be set until all schedulingGates have been cleared")},
+		},
+		{
+			name: "create a Pod with schedulingGates, feature disabled",
+			pod: &core.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "pod", Namespace: "ns"},
+				Spec: core.PodSpec{
+					SchedulingGates: []core.PodSchedulingGate{
+						{Name: "foo"},
+					},
+				},
+			},
+			featureEnabled:  false,
+			wantFieldErrors: nil,
+		},
+		{
+			name: "create a Pod with schedulingGates, feature enabled",
+			pod: &core.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "pod", Namespace: "ns"},
+				Spec: core.PodSpec{
+					SchedulingGates: []core.PodSchedulingGate{
+						{Name: "foo"},
+					},
+				},
+			},
+			featureEnabled:  true,
+			wantFieldErrors: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodSchedulingReadiness, tt.featureEnabled)()
+
+			applyEssentials(tt.pod)
+			errs := ValidatePodCreate(tt.pod, PodValidationOptions{})
+			if diff := cmp.Diff(tt.wantFieldErrors, errs); diff != "" {
+				t.Errorf("unexpected field errors (-want, +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestValidatePodUpdate(t *testing.T) {
 	var (
 		activeDeadlineSecondsZero     = int64(0)
@@ -11693,6 +11797,54 @@ func TestValidatePodUpdate(t *testing.T) {
 			err:  "Forbidden: pod updates may not change fields other than ",
 			test: "update pod spec OS to a valid value, featuregate disabled",
 		},
+		{
+			new: core.Pod{
+				Spec: core.PodSpec{
+					SchedulingGates: []core.PodSchedulingGate{{Name: "foo"}},
+				},
+			},
+			old:  core.Pod{},
+			err:  "Forbidden: only deletion is allowed, but found new scheduling gate 'foo'",
+			test: "update pod spec schedulingGates: add new scheduling gate",
+		},
+		{
+			new: core.Pod{
+				Spec: core.PodSpec{
+					SchedulingGates: []core.PodSchedulingGate{{Name: "bar"}},
+				},
+			},
+			old: core.Pod{
+				Spec: core.PodSpec{
+					SchedulingGates: []core.PodSchedulingGate{{Name: "foo"}},
+				},
+			},
+			err:  "Forbidden: only deletion is allowed, but found new scheduling gate 'bar'",
+			test: "update pod spec schedulingGates: mutating an existing scheduling gate",
+		},
+		{
+			new: core.Pod{
+				Spec: core.PodSpec{
+					SchedulingGates: []core.PodSchedulingGate{{Name: "baz"}},
+				},
+			},
+			old: core.Pod{
+				Spec: core.PodSpec{
+					SchedulingGates: []core.PodSchedulingGate{{Name: "foo"}, {Name: "bar"}},
+				},
+			},
+			err:  "Forbidden: only deletion is allowed, but found new scheduling gate 'baz'",
+			test: "update pod spec schedulingGates: mutating an existing scheduling gate along with deletion",
+		},
+		{
+			new: core.Pod{},
+			old: core.Pod{
+				Spec: core.PodSpec{
+					SchedulingGates: []core.PodSchedulingGate{{Name: "foo"}},
+				},
+			},
+			err:  "",
+			test: "update pod spec schedulingGates: legal deletion",
+		},
 	}
 	for _, test := range tests {
 		test.new.ObjectMeta.ResourceVersion = "1"
@@ -12304,7 +12456,6 @@ func TestValidatePodEphemeralContainersUpdate(t *testing.T) {
 
 	// Some tests use Windows host pods as an example of fields that might
 	// conflict between an ephemeral container and the rest of the pod.
-	opts := PodValidationOptions{AllowWindowsHostProcessField: true}
 	capabilities.SetForTests(capabilities.Capabilities{
 		AllowPrivileged: true,
 	})
@@ -12628,7 +12779,7 @@ func TestValidatePodEphemeralContainersUpdate(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		errs := ValidatePodEphemeralContainersUpdate(tc.new, tc.old, opts)
+		errs := ValidatePodEphemeralContainersUpdate(tc.new, tc.old, PodValidationOptions{})
 		if tc.err == "" {
 			if len(errs) != 0 {
 				t.Errorf("unexpected invalid for test: %s\nErrors returned: %+v\nLocal diff of test objects (-old +new):\n%s", tc.name, errs, cmp.Diff(tc.old, tc.new))
@@ -13331,8 +13482,7 @@ func TestValidateServiceCreate(t *testing.T) {
 			tweakSvc: func(s *core.Service) {
 				s.Spec.InternalTrafficPolicy = nil
 			},
-			featureGates: []featuregate.Feature{features.ServiceInternalTrafficPolicy},
-			numErrs:      1,
+			numErrs: 1,
 		},
 		{
 			name: "internalTrafficPolicy field nil when type is ExternalName",
@@ -13341,8 +13491,7 @@ func TestValidateServiceCreate(t *testing.T) {
 				s.Spec.Type = core.ServiceTypeExternalName
 				s.Spec.ExternalName = "foo.bar.com"
 			},
-			featureGates: []featuregate.Feature{features.ServiceInternalTrafficPolicy},
-			numErrs:      0,
+			numErrs: 0,
 		},
 		{
 			// Typically this should fail validation, but in v1.22 we have existing clusters
@@ -13356,8 +13505,7 @@ func TestValidateServiceCreate(t *testing.T) {
 				s.Spec.Type = core.ServiceTypeExternalName
 				s.Spec.ExternalName = "foo.bar.com"
 			},
-			featureGates: []featuregate.Feature{features.ServiceInternalTrafficPolicy},
-			numErrs:      0,
+			numErrs: 0,
 		},
 		{
 			name: "invalid internalTraffic field",
@@ -18477,9 +18625,13 @@ func TestValidateOSFields(t *testing.T) {
 		"Priority",
 		"PriorityClassName",
 		"ReadinessGates",
+		"ResourceClaims[*].Name",
+		"ResourceClaims[*].Source.ResourceClaimName",
+		"ResourceClaims[*].Source.ResourceClaimTemplateName",
 		"RestartPolicy",
 		"RuntimeClassName",
 		"SchedulerName",
+		"SchedulingGates[*].Name",
 		"SecurityContext.RunAsNonRoot",
 		"ServiceAccountName",
 		"SetHostnameAsFQDN",
@@ -18513,6 +18665,71 @@ func TestValidateOSFields(t *testing.T) {
 				"or add it to the osSpecificFields set, as appropriate:\n%s",
 				strings.Join(unexpected.List(), "\n"))
 		}
+	}
+}
+
+func TestValidateSchedulingGates(t *testing.T) {
+	fieldPath := field.NewPath("field")
+
+	tests := []struct {
+		name            string
+		schedulingGates []core.PodSchedulingGate
+		wantFieldErrors field.ErrorList
+	}{
+		{
+			name:            "nil gates",
+			schedulingGates: nil,
+			wantFieldErrors: field.ErrorList{},
+		},
+		{
+			name: "empty string in gates",
+			schedulingGates: []core.PodSchedulingGate{
+				{Name: "foo"},
+				{Name: ""},
+			},
+			wantFieldErrors: []*field.Error{field.Required(fieldPath.Index(1), "must not be empty")},
+		},
+		{
+			name: "legal gates",
+			schedulingGates: []core.PodSchedulingGate{
+				{Name: "foo"},
+				{Name: "bar"},
+			},
+			wantFieldErrors: field.ErrorList{},
+		},
+		{
+			name: "duplicated gates (single duplication)",
+			schedulingGates: []core.PodSchedulingGate{
+				{Name: "foo"},
+				{Name: "bar"},
+				{Name: "bar"},
+			},
+			wantFieldErrors: []*field.Error{field.Duplicate(fieldPath.Index(2), "bar")},
+		},
+		{
+			name: "duplicated gates (multiple duplications)",
+			schedulingGates: []core.PodSchedulingGate{
+				{Name: "foo"},
+				{Name: "bar"},
+				{Name: "foo"},
+				{Name: "baz"},
+				{Name: "foo"},
+				{Name: "bar"},
+			},
+			wantFieldErrors: field.ErrorList{
+				field.Duplicate(fieldPath.Index(2), "foo"),
+				field.Duplicate(fieldPath.Index(4), "foo"),
+				field.Duplicate(fieldPath.Index(5), "bar"),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validateSchedulingGates(tt.schedulingGates, fieldPath)
+			if diff := cmp.Diff(tt.wantFieldErrors, errs); diff != "" {
+				t.Errorf("unexpected field errors (-want, +got):\n%s", diff)
+			}
+		})
 	}
 }
 
@@ -18660,7 +18877,7 @@ func TestValidateSecurityContext(t *testing.T) {
 		}
 	}
 
-	//setup data
+	// setup data
 	allSettings := fullValidSC()
 	noCaps := fullValidSC()
 	noCaps.Capabilities = nil
@@ -19616,7 +19833,11 @@ func testAnyDataSource(t *testing.T, ds, dsRef bool) {
 
 	for _, tc := range testCases {
 		if dsRef {
-			tc.claimSpec.DataSourceRef = tc.claimSpec.DataSource.DeepCopy()
+			tc.claimSpec.DataSourceRef = &core.TypedObjectReference{
+				APIGroup: tc.claimSpec.DataSource.APIGroup,
+				Kind:     tc.claimSpec.DataSource.Kind,
+				Name:     tc.claimSpec.DataSource.Name,
+			}
 		}
 		if !ds {
 			tc.claimSpec.DataSource = nil
@@ -19638,6 +19859,110 @@ func TestAnyDataSource(t *testing.T) {
 	testAnyDataSource(t, true, false)
 	testAnyDataSource(t, false, true)
 	testAnyDataSource(t, true, false)
+}
+
+func pvcSpecWithCrossNamespaceSource(apiGroup *string, kind string, namespace *string, name string, isDataSourceSet bool) *core.PersistentVolumeClaimSpec {
+	scName := "csi-plugin"
+	spec := core.PersistentVolumeClaimSpec{
+		AccessModes: []core.PersistentVolumeAccessMode{
+			core.ReadOnlyMany,
+		},
+		Resources: core.ResourceRequirements{
+			Requests: core.ResourceList{
+				core.ResourceName(core.ResourceStorage): resource.MustParse("10G"),
+			},
+		},
+		StorageClassName: &scName,
+		DataSourceRef: &core.TypedObjectReference{
+			APIGroup:  apiGroup,
+			Kind:      kind,
+			Namespace: namespace,
+			Name:      name,
+		},
+	}
+
+	if isDataSourceSet {
+		spec.DataSource = &core.TypedLocalObjectReference{
+			APIGroup: apiGroup,
+			Kind:     kind,
+			Name:     name,
+		}
+	}
+	return &spec
+}
+
+func TestCrossNamespaceSource(t *testing.T) {
+	snapAPIGroup := "snapshot.storage.k8s.io"
+	coreAPIGroup := ""
+	unsupportedAPIGroup := "unsupported.example.com"
+	snapKind := "VolumeSnapshot"
+	pvcKind := "PersistentVolumeClaim"
+	goodNS := "ns1"
+	badNS := "a*b"
+	emptyNS := ""
+	goodName := "snapshot1"
+
+	testCases := []struct {
+		testName     string
+		expectedFail bool
+		claimSpec    *core.PersistentVolumeClaimSpec
+	}{
+		{
+			testName:     "Feature gate enabled and valid xns DataSourceRef specified",
+			expectedFail: false,
+			claimSpec:    pvcSpecWithCrossNamespaceSource(&snapAPIGroup, snapKind, &goodNS, goodName, false),
+		},
+		{
+			testName:     "Feature gate enabled and xns DataSourceRef with PVC source specified",
+			expectedFail: false,
+			claimSpec:    pvcSpecWithCrossNamespaceSource(&coreAPIGroup, pvcKind, &goodNS, goodName, false),
+		},
+		{
+			testName:     "Feature gate enabled and xns DataSourceRef with unsupported source specified",
+			expectedFail: false,
+			claimSpec:    pvcSpecWithCrossNamespaceSource(&unsupportedAPIGroup, "UnsupportedKind", &goodNS, goodName, false),
+		},
+		{
+			testName:     "Feature gate enabled and xns DataSourceRef with nil apiGroup",
+			expectedFail: true,
+			claimSpec:    pvcSpecWithCrossNamespaceSource(nil, "UnsupportedKind", &goodNS, goodName, false),
+		},
+		{
+			testName:     "Feature gate enabled and xns DataSourceRef with invalid namspace specified",
+			expectedFail: true,
+			claimSpec:    pvcSpecWithCrossNamespaceSource(&snapAPIGroup, snapKind, &badNS, goodName, false),
+		},
+		{
+			testName:     "Feature gate enabled and xns DataSourceRef with nil namspace specified",
+			expectedFail: false,
+			claimSpec:    pvcSpecWithCrossNamespaceSource(&snapAPIGroup, snapKind, nil, goodName, false),
+		},
+		{
+			testName:     "Feature gate enabled and xns DataSourceRef with empty namspace specified",
+			expectedFail: false,
+			claimSpec:    pvcSpecWithCrossNamespaceSource(&snapAPIGroup, snapKind, &emptyNS, goodName, false),
+		},
+		{
+			testName:     "Feature gate enabled and both xns DataSourceRef and DataSource specified",
+			expectedFail: true,
+			claimSpec:    pvcSpecWithCrossNamespaceSource(&snapAPIGroup, snapKind, &goodNS, goodName, true),
+		},
+	}
+
+	for _, tc := range testCases {
+		defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AnyVolumeDataSource, true)()
+		defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CrossNamespaceVolumeDataSource, true)()
+		opts := PersistentVolumeClaimSpecValidationOptions{}
+		if tc.expectedFail {
+			if errs := ValidatePersistentVolumeClaimSpec(tc.claimSpec, field.NewPath("spec"), opts); len(errs) == 0 {
+				t.Errorf("%s: expected failure: %v", tc.testName, errs)
+			}
+		} else {
+			if errs := ValidatePersistentVolumeClaimSpec(tc.claimSpec, field.NewPath("spec"), opts); len(errs) != 0 {
+				t.Errorf("%s: expected success: %v", tc.testName, errs)
+			}
+		}
+	}
 }
 
 func TestValidateTopologySpreadConstraints(t *testing.T) {
@@ -20606,7 +20931,7 @@ func TestValidateResourceRequirements(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if errs := ValidateResourceRequirements(&tc.requirements, path, tc.opts); len(errs) != 0 {
+			if errs := ValidateResourceRequirements(&tc.requirements, nil, path, tc.opts); len(errs) != 0 {
 				t.Errorf("unexpected errors: %v", errs)
 			}
 		})
@@ -20633,7 +20958,7 @@ func TestValidateResourceRequirements(t *testing.T) {
 
 	for _, tc := range errTests {
 		t.Run(tc.name, func(t *testing.T) {
-			if errs := ValidateResourceRequirements(&tc.requirements, path, tc.opts); len(errs) == 0 {
+			if errs := ValidateResourceRequirements(&tc.requirements, nil, path, tc.opts); len(errs) == 0 {
 				t.Error("expected errors")
 			}
 		})
@@ -20855,78 +21180,12 @@ func TestValidateWindowsHostProcessPod(t *testing.T) {
 	testCases := []struct {
 		name            string
 		expectError     bool
-		featureEnabled  bool
 		allowPrivileged bool
 		podSpec         *core.PodSpec
 	}{
 		{
-			name:            "Spec with feature disabled and pod-wide HostProcess=false and should not validate",
-			expectError:     true,
-			featureEnabled:  false,
-			allowPrivileged: true,
-			podSpec: &core.PodSpec{
-				SecurityContext: &core.PodSecurityContext{
-					WindowsOptions: &core.WindowsSecurityContextOptions{
-						HostProcess: &falseVar,
-					},
-				},
-				Containers: []core.Container{{
-					Name: containerName,
-				}},
-			},
-		},
-		{
-			name:            "Spec with feature disabled and pod-wide HostProcess=nil set should valildate",
-			expectError:     false,
-			featureEnabled:  false,
-			allowPrivileged: true,
-			podSpec: &core.PodSpec{
-				SecurityContext: &core.PodSecurityContext{
-					WindowsOptions: &core.WindowsSecurityContextOptions{
-						HostProcess: nil,
-					},
-				},
-				Containers: []core.Container{{
-					Name: containerName,
-				}},
-			},
-		},
-		{
-			name:            "Spec with feature disabled and container setting HostProcess=true should not valildate",
-			expectError:     true,
-			featureEnabled:  false,
-			allowPrivileged: true,
-			podSpec: &core.PodSpec{
-				Containers: []core.Container{{
-					Name: containerName,
-					SecurityContext: &core.SecurityContext{
-						WindowsOptions: &core.WindowsSecurityContextOptions{
-							HostProcess: &trueVar,
-						},
-					},
-				}},
-			},
-		},
-		{
-			name:            "Spec with feature disabled and init container setting HostProcess=true should not valildate",
-			expectError:     true,
-			featureEnabled:  false,
-			allowPrivileged: true,
-			podSpec: &core.PodSpec{
-				InitContainers: []core.Container{{
-					Name: containerName,
-					SecurityContext: &core.SecurityContext{
-						WindowsOptions: &core.WindowsSecurityContextOptions{
-							HostProcess: &trueVar,
-						},
-					},
-				}},
-			},
-		},
-		{
 			name:            "Spec with feature enabled, pod-wide HostProcess=true, and HostNetwork unset should not validate",
 			expectError:     true,
-			featureEnabled:  true,
 			allowPrivileged: true,
 			podSpec: &core.PodSpec{
 				SecurityContext: &core.PodSecurityContext{
@@ -20942,7 +21201,6 @@ func TestValidateWindowsHostProcessPod(t *testing.T) {
 		{
 			name:            "Spec with feature enabled, pod-wide HostProcess=ture, and HostNetwork set should validate",
 			expectError:     false,
-			featureEnabled:  true,
 			allowPrivileged: true,
 			podSpec: &core.PodSpec{
 				SecurityContext: &core.PodSecurityContext{
@@ -20959,7 +21217,6 @@ func TestValidateWindowsHostProcessPod(t *testing.T) {
 		{
 			name:            "Spec with feature enabled, pod-wide HostProcess=ture, HostNetwork set, and containers setting HostProcess=true should validate",
 			expectError:     false,
-			featureEnabled:  true,
 			allowPrivileged: true,
 			podSpec: &core.PodSpec{
 				SecurityContext: &core.PodSecurityContext{
@@ -20989,7 +21246,6 @@ func TestValidateWindowsHostProcessPod(t *testing.T) {
 		{
 			name:            "Spec with feature enabled, pod-wide HostProcess=nil, HostNetwork set, and all containers setting HostProcess=true should validate",
 			expectError:     false,
-			featureEnabled:  true,
 			allowPrivileged: true,
 			podSpec: &core.PodSpec{
 				SecurityContext: &core.PodSecurityContext{
@@ -21016,7 +21272,6 @@ func TestValidateWindowsHostProcessPod(t *testing.T) {
 		{
 			name:            "Pods with feature enabled, some containers setting HostProcess=true, and others setting HostProcess=false should not validate",
 			expectError:     true,
-			featureEnabled:  true,
 			allowPrivileged: true,
 			podSpec: &core.PodSpec{
 				SecurityContext: &core.PodSecurityContext{
@@ -21043,7 +21298,6 @@ func TestValidateWindowsHostProcessPod(t *testing.T) {
 		{
 			name:            "Spec with feature enabled, some containers setting HostProcess=true, and other leaving HostProcess unset should not validate",
 			expectError:     true,
-			featureEnabled:  true,
 			allowPrivileged: true,
 			podSpec: &core.PodSpec{
 				SecurityContext: &core.PodSecurityContext{
@@ -21065,7 +21319,6 @@ func TestValidateWindowsHostProcessPod(t *testing.T) {
 		{
 			name:            "Spec with feature enabled, pod-wide HostProcess=true, some containers setting HostProcess=true, and init containers setting HostProcess=false should not validate",
 			expectError:     true,
-			featureEnabled:  true,
 			allowPrivileged: true,
 			podSpec: &core.PodSpec{
 				SecurityContext: &core.PodSecurityContext{
@@ -21095,7 +21348,6 @@ func TestValidateWindowsHostProcessPod(t *testing.T) {
 		{
 			name:            "Spec with feature enabled, pod-wide HostProcess=true, some containers setting HostProcess=true, and others setting HostProcess=false should not validate",
 			expectError:     true,
-			featureEnabled:  true,
 			allowPrivileged: true,
 			podSpec: &core.PodSpec{
 				SecurityContext: &core.PodSecurityContext{
@@ -21126,7 +21378,6 @@ func TestValidateWindowsHostProcessPod(t *testing.T) {
 		{
 			name:            "Spec with feature enabled, pod-wide HostProcess=true, some containers setting HostProcess=true, and others leaving HostProcess=nil should validate",
 			expectError:     false,
-			featureEnabled:  true,
 			allowPrivileged: true,
 			podSpec: &core.PodSpec{
 				SecurityContext: &core.PodSecurityContext{
@@ -21151,7 +21402,6 @@ func TestValidateWindowsHostProcessPod(t *testing.T) {
 		{
 			name:            "Spec with feature enabled, pod-wide HostProcess=false, some contaienrs setting HostProccess=true should not validate",
 			expectError:     true,
-			featureEnabled:  true,
 			allowPrivileged: true,
 			podSpec: &core.PodSpec{
 				SecurityContext: &core.PodSecurityContext{
@@ -21176,7 +21426,6 @@ func TestValidateWindowsHostProcessPod(t *testing.T) {
 		{
 			name:            "Pod's HostProcess set to true but all containers override to false should not validate",
 			expectError:     true,
-			featureEnabled:  true,
 			allowPrivileged: true,
 			podSpec: &core.PodSpec{
 				SecurityContext: &core.PodSecurityContext{
@@ -21198,7 +21447,6 @@ func TestValidateWindowsHostProcessPod(t *testing.T) {
 		{
 			name:            "Valid HostProcess pod should spec should not validate if allowPrivileged is not set",
 			expectError:     true,
-			featureEnabled:  true,
 			allowPrivileged: false,
 			podSpec: &core.PodSpec{
 				SecurityContext: &core.PodSecurityContext{
@@ -21217,7 +21465,6 @@ func TestValidateWindowsHostProcessPod(t *testing.T) {
 		{
 			name:            "Non-HostProcess ephemeral container in HostProcess pod should not validate",
 			expectError:     true,
-			featureEnabled:  true,
 			allowPrivileged: true,
 			podSpec: &core.PodSpec{
 				SecurityContext: &core.PodSecurityContext{
@@ -21243,7 +21490,6 @@ func TestValidateWindowsHostProcessPod(t *testing.T) {
 		{
 			name:            "HostProcess ephemeral container in HostProcess pod should validate",
 			expectError:     false,
-			featureEnabled:  true,
 			allowPrivileged: true,
 			podSpec: &core.PodSpec{
 				SecurityContext: &core.PodSecurityContext{
@@ -21263,7 +21509,6 @@ func TestValidateWindowsHostProcessPod(t *testing.T) {
 		{
 			name:            "Non-HostProcess ephemeral container in Non-HostProcess pod should validate",
 			expectError:     false,
-			featureEnabled:  true,
 			allowPrivileged: true,
 			podSpec: &core.PodSpec{
 				Containers: []core.Container{{
@@ -21283,7 +21528,6 @@ func TestValidateWindowsHostProcessPod(t *testing.T) {
 		{
 			name:            "HostProcess ephemeral container in Non-HostProcess pod should not validate",
 			expectError:     true,
-			featureEnabled:  true,
 			allowPrivileged: true,
 			podSpec: &core.PodSpec{
 				Containers: []core.Container{{
@@ -21304,15 +21548,12 @@ func TestValidateWindowsHostProcessPod(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.WindowsHostProcessContainers, testCase.featureEnabled)()
-
-			opts := PodValidationOptions{AllowWindowsHostProcessField: testCase.featureEnabled}
 
 			capabilities.SetForTests(capabilities.Capabilities{
 				AllowPrivileged: testCase.allowPrivileged,
 			})
 
-			errs := validateWindowsHostProcessPod(testCase.podSpec, field.NewPath("spec"), opts)
+			errs := validateWindowsHostProcessPod(testCase.podSpec, field.NewPath("spec"))
 			if testCase.expectError && len(errs) == 0 {
 				t.Errorf("Unexpected success")
 			}
@@ -21455,5 +21696,222 @@ func TestValidatePVSecretReference(t *testing.T) {
 				t.Errorf("Unexpected error(s): %v", errs)
 			}
 		})
+	}
+}
+
+func TestValidateDynamicResourceAllocation(t *testing.T) {
+	externalClaimName := "some-claim"
+	externalClaimTemplateName := "some-claim-template"
+	goodClaimSource := core.ClaimSource{
+		ResourceClaimName: &externalClaimName,
+	}
+
+	successCases := map[string]core.PodSpec{
+		"resource claim reference": {
+			Containers:    []core.Container{{Name: "ctr", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File", Resources: core.ResourceRequirements{Claims: []core.ResourceClaim{{Name: "my-claim"}}}}},
+			RestartPolicy: core.RestartPolicyAlways,
+			DNSPolicy:     core.DNSClusterFirst,
+			ResourceClaims: []core.PodResourceClaim{
+				{
+					Name: "my-claim",
+					Source: core.ClaimSource{
+						ResourceClaimName: &externalClaimName,
+					},
+				},
+			},
+		},
+		"resource claim template": {
+			Containers:    []core.Container{{Name: "ctr", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File", Resources: core.ResourceRequirements{Claims: []core.ResourceClaim{{Name: "my-claim"}}}}},
+			RestartPolicy: core.RestartPolicyAlways,
+			DNSPolicy:     core.DNSClusterFirst,
+			ResourceClaims: []core.PodResourceClaim{
+				{
+					Name: "my-claim",
+					Source: core.ClaimSource{
+						ResourceClaimTemplateName: &externalClaimTemplateName,
+					},
+				},
+			},
+		},
+		"multiple claims": {
+			Containers:    []core.Container{{Name: "ctr", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File", Resources: core.ResourceRequirements{Claims: []core.ResourceClaim{{Name: "my-claim"}, {Name: "another-claim"}}}}},
+			RestartPolicy: core.RestartPolicyAlways,
+			DNSPolicy:     core.DNSClusterFirst,
+			ResourceClaims: []core.PodResourceClaim{
+				{
+					Name:   "my-claim",
+					Source: goodClaimSource,
+				},
+				{
+					Name:   "another-claim",
+					Source: goodClaimSource,
+				},
+			},
+		},
+		"init container": {
+			Containers:     []core.Container{{Name: "ctr", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File", Resources: core.ResourceRequirements{Claims: []core.ResourceClaim{{Name: "my-claim"}}}}},
+			InitContainers: []core.Container{{Name: "ctr-init", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File", Resources: core.ResourceRequirements{Claims: []core.ResourceClaim{{Name: "my-claim"}}}}},
+			RestartPolicy:  core.RestartPolicyAlways,
+			DNSPolicy:      core.DNSClusterFirst,
+			ResourceClaims: []core.PodResourceClaim{
+				{
+					Name:   "my-claim",
+					Source: goodClaimSource,
+				},
+			},
+		},
+	}
+	for k, v := range successCases {
+		t.Run(k, func(t *testing.T) {
+			if errs := ValidatePodSpec(&v, nil, field.NewPath("field"), PodValidationOptions{}); len(errs) != 0 {
+				t.Errorf("expected success: %v", errs)
+			}
+		})
+	}
+
+	failureCases := map[string]core.PodSpec{
+		"pod claim name with prefix": {
+			Containers:    []core.Container{{Name: "ctr", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File"}},
+			RestartPolicy: core.RestartPolicyAlways,
+			DNSPolicy:     core.DNSClusterFirst,
+			ResourceClaims: []core.PodResourceClaim{
+				{
+					Name:   "../my-claim",
+					Source: goodClaimSource,
+				},
+			},
+		},
+		"pod claim name with path": {
+			Containers:    []core.Container{{Name: "ctr", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File"}},
+			RestartPolicy: core.RestartPolicyAlways,
+			DNSPolicy:     core.DNSClusterFirst,
+			ResourceClaims: []core.PodResourceClaim{
+				{
+					Name:   "my/claim",
+					Source: goodClaimSource,
+				},
+			},
+		},
+		"pod claim name empty": {
+			Containers:    []core.Container{{Name: "ctr", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File"}},
+			RestartPolicy: core.RestartPolicyAlways,
+			DNSPolicy:     core.DNSClusterFirst,
+			ResourceClaims: []core.PodResourceClaim{
+				{
+					Name:   "",
+					Source: goodClaimSource,
+				},
+			},
+		},
+		"duplicate pod claim entries": {
+			Containers:    []core.Container{{Name: "ctr", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File"}},
+			RestartPolicy: core.RestartPolicyAlways,
+			DNSPolicy:     core.DNSClusterFirst,
+			ResourceClaims: []core.PodResourceClaim{
+				{
+					Name:   "my-claim",
+					Source: goodClaimSource,
+				},
+				{
+					Name:   "my-claim",
+					Source: goodClaimSource,
+				},
+			},
+		},
+		"resource claim source empty": {
+			Containers:    []core.Container{{Name: "ctr", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File", Resources: core.ResourceRequirements{Claims: []core.ResourceClaim{{Name: "my-claim"}}}}},
+			RestartPolicy: core.RestartPolicyAlways,
+			DNSPolicy:     core.DNSClusterFirst,
+			ResourceClaims: []core.PodResourceClaim{
+				{
+					Name:   "my-claim",
+					Source: core.ClaimSource{},
+				},
+			},
+		},
+		"resource claim reference and template": {
+			Containers:    []core.Container{{Name: "ctr", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File", Resources: core.ResourceRequirements{Claims: []core.ResourceClaim{{Name: "my-claim"}}}}},
+			RestartPolicy: core.RestartPolicyAlways,
+			DNSPolicy:     core.DNSClusterFirst,
+			ResourceClaims: []core.PodResourceClaim{
+				{
+					Name: "my-claim",
+					Source: core.ClaimSource{
+						ResourceClaimName:         &externalClaimName,
+						ResourceClaimTemplateName: &externalClaimTemplateName,
+					},
+				},
+			},
+		},
+		"claim not found": {
+			Containers:    []core.Container{{Name: "ctr", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File", Resources: core.ResourceRequirements{Claims: []core.ResourceClaim{{Name: "no-such-claim"}}}}},
+			RestartPolicy: core.RestartPolicyAlways,
+			DNSPolicy:     core.DNSClusterFirst,
+			ResourceClaims: []core.PodResourceClaim{
+				{
+					Name:   "my-claim",
+					Source: goodClaimSource,
+				},
+			},
+		},
+		"claim name empty": {
+			Containers:    []core.Container{{Name: "ctr", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File", Resources: core.ResourceRequirements{Claims: []core.ResourceClaim{{Name: ""}}}}},
+			RestartPolicy: core.RestartPolicyAlways,
+			DNSPolicy:     core.DNSClusterFirst,
+			ResourceClaims: []core.PodResourceClaim{
+				{
+					Name:   "my-claim",
+					Source: goodClaimSource,
+				},
+			},
+		},
+		"pod claim name duplicates": {
+			Containers:    []core.Container{{Name: "ctr", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File", Resources: core.ResourceRequirements{Claims: []core.ResourceClaim{{Name: "my-claim"}, {Name: "my-claim"}}}}},
+			RestartPolicy: core.RestartPolicyAlways,
+			DNSPolicy:     core.DNSClusterFirst,
+			ResourceClaims: []core.PodResourceClaim{
+				{
+					Name:   "my-claim",
+					Source: goodClaimSource,
+				},
+			},
+		},
+		"no claims defined": {
+			Containers:    []core.Container{{Name: "ctr", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File", Resources: core.ResourceRequirements{Claims: []core.ResourceClaim{{Name: "my-claim"}}}}},
+			RestartPolicy: core.RestartPolicyAlways,
+			DNSPolicy:     core.DNSClusterFirst,
+		},
+		"duplicate pod claim name": {
+			Containers:    []core.Container{{Name: "ctr", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File", Resources: core.ResourceRequirements{Claims: []core.ResourceClaim{{Name: "my-claim"}}}}},
+			RestartPolicy: core.RestartPolicyAlways,
+			DNSPolicy:     core.DNSClusterFirst,
+			ResourceClaims: []core.PodResourceClaim{
+				{
+					Name:   "my-claim",
+					Source: goodClaimSource,
+				},
+				{
+					Name:   "my-claim",
+					Source: goodClaimSource,
+				},
+			},
+		},
+		"ephemeral container don't support resource requirements": {
+			Containers:          []core.Container{{Name: "ctr", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File", Resources: core.ResourceRequirements{Claims: []core.ResourceClaim{{Name: "my-claim"}}}}},
+			EphemeralContainers: []core.EphemeralContainer{{EphemeralContainerCommon: core.EphemeralContainerCommon{Name: "ctr-ephemeral", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File", Resources: core.ResourceRequirements{Claims: []core.ResourceClaim{{Name: "my-claim"}}}}, TargetContainerName: "ctr"}},
+			RestartPolicy:       core.RestartPolicyAlways,
+			DNSPolicy:           core.DNSClusterFirst,
+			ResourceClaims: []core.PodResourceClaim{
+				{
+					Name:   "my-claim",
+					Source: goodClaimSource,
+				},
+			},
+		},
+	}
+	for k, v := range failureCases {
+		if errs := ValidatePodSpec(&v, nil, field.NewPath("field"), PodValidationOptions{}); len(errs) == 0 {
+			t.Errorf("expected failure for %q", k)
+		}
 	}
 }

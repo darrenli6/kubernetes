@@ -1484,6 +1484,19 @@ func TestPersistentVolumeDescriber(t *testing.T) {
 			unexpectedElements: []string{"VolumeMode", "Filesystem"},
 		},
 		{
+			name:   "test8",
+			plugin: "cinder",
+			pv: &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{Name: "bar"},
+				Spec: corev1.PersistentVolumeSpec{
+					PersistentVolumeSource: corev1.PersistentVolumeSource{
+						Cinder: &corev1.CinderPersistentVolumeSource{},
+					},
+				},
+			},
+			unexpectedElements: []string{"VolumeMode", "Filesystem"},
+		},
+		{
 			name:   "test9",
 			plugin: "fc",
 			pv: &corev1.PersistentVolume{
@@ -2798,6 +2811,30 @@ Rules:
   Host        Path  Backends
   ----        ----  --------
   *           *     default-backend:80 (<error: endpoints "default-backend" not found>)
+Annotations:  <none>
+Events:       <none>
+`,
+		},
+		"EmptyBackend": {
+			input: fake.NewSimpleClientset(&networkingv1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "bar",
+					Namespace: "foo",
+				},
+				Spec: networkingv1.IngressSpec{
+					IngressClassName: &ingresClassName,
+				},
+			}),
+			output: `Name:             bar
+Labels:           <none>
+Namespace:        foo
+Address:          
+Ingress Class:    test
+Default backend:  <default>
+Rules:
+  Host        Path  Backends
+  ----        ----  --------
+  *           *     <default>
 Annotations:  <none>
 Events:       <none>
 `,
@@ -5504,6 +5541,25 @@ func TestControllerRef(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 	if !strings.Contains(out, "1 Running") {
+		t.Errorf("unexpected out: %s", out)
+	}
+}
+
+func TestDescribeTerminalEscape(t *testing.T) {
+	fake := fake.NewSimpleClientset(&corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "mycm",
+			Namespace:   "foo",
+			Annotations: map[string]string{"annotation1": "terminal escape: \x1b"},
+		},
+	})
+	c := &describeClient{T: t, Namespace: "foo", Interface: fake}
+	d := ConfigMapDescriber{c}
+	out, err := d.Describe("foo", "mycm", DescriberSettings{ShowEvents: true})
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if strings.Contains(out, "\x1b") || !strings.Contains(out, "^[") {
 		t.Errorf("unexpected out: %s", out)
 	}
 }

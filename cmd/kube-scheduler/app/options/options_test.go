@@ -42,6 +42,7 @@ import (
 	configtesting "k8s.io/kubernetes/pkg/scheduler/apis/config/testing"
 	"k8s.io/kubernetes/pkg/scheduler/apis/config/testing/defaults"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/names"
+	"k8s.io/utils/pointer"
 )
 
 func TestSchedulerOptions(t *testing.T) {
@@ -220,6 +221,9 @@ clientConnection:
   kubeconfig: '%s'
 profiles:
 - plugins:
+    preEnqueue:
+      enabled:
+      - name: foo
     reserve:
       enabled:
       - name: foo
@@ -395,7 +399,7 @@ profiles:
 
 	defaultPodInitialBackoffSeconds := int64(1)
 	defaultPodMaxBackoffSeconds := int64(10)
-	defaultPercentageOfNodesToScore := int32(0)
+	defaultPercentageOfNodesToScore := pointer.Int32(0)
 
 	testcases := []struct {
 		name             string
@@ -829,6 +833,11 @@ profiles:
 					{
 						SchedulerName: "default-scheduler",
 						Plugins: &kubeschedulerconfig.Plugins{
+							PreEnqueue: kubeschedulerconfig.PluginSet{
+								Enabled: []kubeschedulerconfig.Plugin{
+									{Name: "foo"},
+								},
+							},
 							Reserve: kubeschedulerconfig.PluginSet{
 								Enabled: []kubeschedulerconfig.Plugin{
 									{Name: "foo"},
@@ -943,6 +952,7 @@ profiles:
 					{
 						SchedulerName: "default-scheduler",
 						Plugins: &kubeschedulerconfig.Plugins{
+							PreEnqueue: defaults.PluginsV1beta3.PreEnqueue,
 							QueueSort:  defaults.PluginsV1beta3.QueueSort,
 							PreFilter:  defaults.PluginsV1beta3.PreFilter,
 							Filter:     defaults.PluginsV1beta3.Filter,
@@ -1064,6 +1074,7 @@ profiles:
 					{
 						SchedulerName: "default-scheduler",
 						Plugins: &kubeschedulerconfig.Plugins{
+							PreEnqueue: defaults.PluginsV1beta2.PreEnqueue,
 							QueueSort:  defaults.PluginsV1beta2.QueueSort,
 							PreFilter:  defaults.PluginsV1beta2.PreFilter,
 							Filter:     defaults.PluginsV1beta2.Filter,
@@ -1426,6 +1437,7 @@ profiles:
 					{
 						SchedulerName: "bar-profile",
 						Plugins: &kubeschedulerconfig.Plugins{
+							PreEnqueue: defaults.PluginsV1beta2.PreEnqueue,
 							QueueSort:  defaults.PluginsV1beta2.QueueSort,
 							PreFilter:  defaults.PluginsV1beta2.PreFilter,
 							Filter:     defaults.PluginsV1beta2.Filter,

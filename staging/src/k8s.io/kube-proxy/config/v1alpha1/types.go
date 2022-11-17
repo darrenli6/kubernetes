@@ -29,6 +29,9 @@ type KubeProxyIPTablesConfiguration struct {
 	MasqueradeBit *int32 `json:"masqueradeBit"`
 	// masqueradeAll tells kube-proxy to SNAT everything if using the pure iptables proxy mode.
 	MasqueradeAll bool `json:"masqueradeAll"`
+	// LocalhostNodePorts tells kube-proxy to allow service NodePorts to be accessed via
+	// localhost (iptables mode only)
+	LocalhostNodePorts *bool `json:"localhostNodePorts"`
 	// syncPeriod is the period that iptables rules are refreshed (e.g. '5s', '1m',
 	// '2h22m').  Must be greater than 0.
 	SyncPeriod metav1.Duration `json:"syncPeriod"`
@@ -185,8 +188,8 @@ type KubeProxyConfiguration struct {
 
 // ProxyMode represents modes used by the Kubernetes proxy server.
 //
-// Currently, two modes of proxy are available in Linux platform: 'iptables' and 'ipvs'.
-// One mode of proxy is available in Windows platform: 'kernelspace'.
+// Currently, two modes of proxy are available on Linux platforms: 'iptables' and 'ipvs'.
+// One mode of proxy is available on Windows platforms: 'kernelspace'.
 //
 // If the proxy mode is unspecified, the best-available proxy mode will be used (currently this
 // is `iptables` on Linux and `kernelspace` on Windows). If the selected proxy mode cannot be
